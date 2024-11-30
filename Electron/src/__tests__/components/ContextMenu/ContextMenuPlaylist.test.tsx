@@ -7,6 +7,7 @@ import { BrowserRouter } from 'react-router-dom';
 import UserType from 'utils/role';
 import * as router from 'react-router';
 import getMockHeaders from 'utils/mockHeaders';
+import { waitFor } from '@testing-library/react';
 import * as TokenModule from 'utils/token';
 
 const playlistName = 'playlisttest';
@@ -111,6 +112,17 @@ global.fetch = jest.fn((url: string, options: any) => {
   return Promise.reject(new Error(`Unhandled URL in fetch mock: ${url}`));
 }) as jest.Mock;
 
+beforeAll(() => {
+  Object.defineProperty(window, 'electron', {
+    value: {
+      copyToClipboard: {
+        sendMessage: jest.fn(),
+      },
+    },
+    writable: true,
+  });
+});
+
 test('Render ContextMenuPlaylist', async () => {
   const component = await act(() => {
     return render(
@@ -187,4 +199,177 @@ test('ContextMenuPlaylist Add Playlist to Playlist', async () => {
   }
 
   expect(component.queryByText('Canciones añadidas')).toBeInTheDocument();
+});
+
+test('ContextMenuPlaylist Add Songs Error', async () => {
+  const component = await act(() => {
+    return render(
+      <BrowserRouter>
+        <ContextMenuPlaylist
+          playlistName={playlistName}
+          owner={artistMockFetch.name}
+          handleCloseParent={jest.fn()}
+          refreshPlaylistData={jest.fn()}
+          refreshSidebarData={jest.fn()}
+        />
+      </BrowserRouter>,
+    );
+  });
+
+  const addToOtherPlaylistButton = component.getByText('Añadir a otra lista');
+  if (addToOtherPlaylistButton) {
+    await act(async () => {
+      fireEvent.click(addToOtherPlaylistButton);
+    });
+  }
+
+  const playlistButton = component.getByText(playlistName);
+  if (playlistButton) {
+    global.fetch = jest.fn(() =>
+      Promise.reject(new Error('Failed to add songs')),
+    );
+    await act(async () => {
+      fireEvent.click(playlistButton);
+    });
+  }
+
+  expect(component.queryByText('Canciones no añadidas')).toBeInTheDocument();
+});
+
+test('ContextMenuPlaylist Delete Playlist Success', async () => {
+  const refreshSidebarDataMock = jest.fn();
+
+  const component = await act(() => {
+    return render(
+      <BrowserRouter>
+        <ContextMenuPlaylist
+          playlistName={playlistName}
+          owner={artistMockFetch.name}
+          handleCloseParent={jest.fn()}
+          refreshPlaylistData={jest.fn()}
+          refreshSidebarData={refreshSidebarDataMock}
+        />
+      </BrowserRouter>,
+    );
+  });
+
+  const deleteButton = component.getByText('Eliminar');
+  if (deleteButton) {
+    await act(async () => {
+      fireEvent.click(deleteButton);
+    });
+  }
+
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  });
+
+  expect(component.queryByText('Playlist eliminada')).toBeInTheDocument();
+});
+
+test('ContextMenuPlaylist Delete Playlist Error', async () => {
+  const component = await act(() => {
+    return render(
+      <BrowserRouter>
+        <ContextMenuPlaylist
+          playlistName={playlistName}
+          owner={artistMockFetch.name}
+          handleCloseParent={jest.fn()}
+          refreshPlaylistData={jest.fn()}
+          refreshSidebarData={jest.fn()}
+        />
+      </BrowserRouter>,
+    );
+  });
+
+  global.fetch = jest.fn(() =>
+    Promise.reject(new Error('Failed to delete playlist')),
+  );
+
+  const deleteButton = component.getByText('Eliminar');
+  if (deleteButton) {
+    await act(async () => {
+      fireEvent.click(deleteButton);
+    });
+  }
+
+  expect(component.queryByText('Playlist no eliminada')).toBeInTheDocument();
+});
+
+test('ContextMenuPlaylist Copy to Clipboard', async () => {
+  const component = await act(() => {
+    return render(
+      <BrowserRouter>
+        <ContextMenuPlaylist
+          playlistName={playlistName}
+          owner={artistMockFetch.name}
+          handleCloseParent={jest.fn()}
+          refreshPlaylistData={jest.fn()}
+          refreshSidebarData={jest.fn()}
+        />
+      </BrowserRouter>,
+    );
+  });
+
+  const copyButton = component.getByText('Compartir');
+  if (copyButton) {
+    await act(async () => {
+      fireEvent.click(copyButton);
+    });
+  }
+
+  expect(
+    component.queryByText('Enlace copiado al portapapeles'),
+  ).toBeInTheDocument();
+});
+
+test('ContextMenuPlaylist Default Case Error', async () => {
+  const refreshSidebarDataMock = jest.fn();
+  const mockHandleCloseParent = jest.fn();
+
+  global.fetch = jest.fn(() => Promise.reject(new Error('Network error')));
+
+  const { queryByText } = render(
+    <BrowserRouter>
+      <ContextMenuPlaylist
+        playlistName={playlistName}
+        owner={artistMockFetch.name}
+        handleCloseParent={mockHandleCloseParent}
+        refreshPlaylistData={jest.fn()}
+        refreshSidebarData={refreshSidebarDataMock}
+      />
+    </BrowserRouter>,
+  );
+
+  await waitFor(() => {
+    expect(queryByText('Ha ocurrido un error.')).toBeInTheDocument();
+  });
+});
+
+test('ContextMenuPlaylist close after action', async () => {
+  const refreshSidebarDataMock = jest.fn();
+  const mockHandleCloseParent = jest.fn();
+
+  const { getByText } = await act(async () =>
+    render(
+      <BrowserRouter>
+        <ContextMenuPlaylist
+          playlistName={playlistName}
+          owner={artistMockFetch.name}
+          handleCloseParent={mockHandleCloseParent}
+          refreshPlaylistData={jest.fn()}
+          refreshSidebarData={refreshSidebarDataMock}
+        />
+      </BrowserRouter>,
+    ),
+  );
+
+  const deleteButton = getByText('Eliminar');
+  if (deleteButton) {
+    await act(async () => {
+      fireEvent.click(deleteButton);
+    });
+  }
+
+  expect(mockHandleCloseParent).toHaveBeenCalled();
 });
