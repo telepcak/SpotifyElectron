@@ -112,6 +112,7 @@ global.fetch = jest.fn((url: string, options: any) => {
   return Promise.reject(new Error(`Unhandled URL in fetch mock: ${url}`));
 }) as jest.Mock;
 
+//tests
 beforeAll(() => {
   Object.defineProperty(window, 'electron', {
     value: {
